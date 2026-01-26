@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: opus-mvp-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: oregon
+    branch: main
+    healthCheckPath: /
+    envVars:
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: us-east-1
+      - key: S3_BUCKET
+        value: opus-clips
+      - key: FFMPEG_PATH
+        value: ffmpeg
+      - key: PYTHONPATH
+        value: /app

@@ -17,9 +17,10 @@ s3 = boto3.client(
 )
 
 def upload_file(local_path: str, s3_key: str) -> str:
-    """
-    Uploads a local file to S3 and returns a public URL
-    """
+    print("UPLOAD STARTED:", local_path, "->", s3_key, flush=True)
+
     s3.upload_file(local_path, S3_BUCKET, s3_key)
+
+    print("UPLOAD DONE:", s3_key, flush=True)
 
     return f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"

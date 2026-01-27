@@ -30,10 +30,6 @@ EXPOSE 8000
 ENV PYTHONPATH=/app
 ENV FFMPEG_PATH=ffmpeg
 
-# Environment variables that should be passed at runtime
-
-ENV AWS_REGION=us-east-1
-ENV S3_BUCKET=opus-clips
 
 # Run the application
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

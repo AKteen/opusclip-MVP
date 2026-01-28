@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from app.store import jobs
 from fastapi import HTTPException
 
-app = FastAPI(title="Opus MVP API")
+app = FastAPI(title="Clipix MVP")
 
 # Add CORS middleware
 app.add_middleware(

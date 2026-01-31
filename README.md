@@ -1,5 +1,6 @@
 # Celer Clips
-
+Live on : marketingautoclips-production.up.railway.app
+Designed For : Eagle Studios.
 
 # 🎬 Video Highlight & Clip Generation MVP
 

@@ -1,5 +1,5 @@
 # Celer Clips
-Live on : marketingautoclips-production.up.railway.app
+Live on : https://github.com/AKteen/opusclip-MVP
 Designed For : Eagle Studios.
 
 # 🎬 Video Highlight & Clip Generation MVP

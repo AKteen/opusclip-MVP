@@ -52,7 +52,7 @@ def download_video(file_url: str, job_id: str) -> dict:
                     if chunk:
                         f.write(chunk)
 
-    # 🔒 Safety check
+    # Safety check
     if not os.path.exists(video_path) or os.path.getsize(video_path) < 100000:
         raise RuntimeError("Downloaded file is invalid or too small")
 

@@ -29,8 +29,9 @@ def detect_highlights(
     # Normalize
     energies = (energies - energies.min()) / (energies.max() - energies.min() + 1e-8)
 
-    # Pick top energetic moments
-    top_idxs = np.argsort(energies)[-clip_count:]
+    # Pick more candidates to account for overlaps
+    candidates_needed = min(clip_count * 3, len(energies))
+    top_idxs = np.argsort(energies)[-candidates_needed:]
     top_times = sorted(times[i] for i in top_idxs)
 
     clips = []
@@ -47,5 +48,23 @@ def detect_highlights(
         if start >= last_end:
             final_clips.append((start, end))
             last_end = end
+            if len(final_clips) >= clip_count:
+                break
+
+    # Fallback: if still not enough clips, add evenly spaced ones
+    if len(final_clips) < clip_count:
+        missing = clip_count - len(final_clips)
+        step = duration / (missing + 1)
+        
+        for i in range(missing):
+            fallback_start = round(step * (i + 1), 2)
+            fallback_end = round(min(fallback_start + clip_duration, duration), 2)
+            
+            # Check if this fallback clip overlaps with existing clips
+            overlaps = any(not (fallback_end <= existing[0] or fallback_start >= existing[1]) 
+                          for existing in final_clips)
+            
+            if not overlaps:
+                final_clips.append((fallback_start, fallback_end))
 
     return final_clips[:clip_count]

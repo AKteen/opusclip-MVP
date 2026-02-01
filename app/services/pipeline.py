@@ -1,5 +1,11 @@
+
+
+# Initial core media processing pipeline and MVP created by Aditya (Github : AKteen)
+
 import logging
 import time
+import os
+
 from app.services.downloader import download_video
 from app.services.audio import extract_audio
 from app.services.highlights import detect_highlights
@@ -44,6 +50,16 @@ def run_pipeline(video_url, clip_duration, clip_count, job_id):
         highlights = detect_highlights(audio_wav, clip_duration, clip_count)
         logger.info(f"[{job_id}] Step 3/6: Highlight detection completed in {time.time() - step_start:.2f}s - Found {len(highlights)} highlights")
         
+
+        try:
+            os.remove(audio_wav)
+            logger.info(f"[{job_id}] Deleted audio file")
+        except Exception as e:
+            logger.warning(f"[{job_id}] Failed to delete audio file: {e}")
+
+        jobs[job_id] = {"status": "cutting_clips", "progress": 65}
+
+
         for i, (s, e) in enumerate(highlights, 1):
             logger.info(f"[{job_id}] Highlight {i}: {s}s → {e}s (duration: {e-s}s)")
         
@@ -72,6 +88,17 @@ def run_pipeline(video_url, clip_duration, clip_count, job_id):
         )
         logger.info(f"[{job_id}] Step 5/6: Original video uploaded in {time.time() - step_start:.2f}s - S3 URL: {video_s3_url}")
         
+
+
+        try:
+            os.remove(paths["video"])
+            logger.info(f"[{job_id}] Deleted original video file")
+        except Exception as e:
+            logger.warning(f"[{job_id}] Failed to delete video file: {e}")
+
+
+
+
         # 6️⃣ Mark job completed
         logger.info(f"[{job_id}] Step 6/6: Finalizing job...")
         jobs[job_id] = {

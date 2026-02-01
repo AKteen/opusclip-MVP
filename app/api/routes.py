@@ -5,6 +5,8 @@ import uuid
 from app.services.pipeline import run_pipeline
 from app.store import jobs
 
+#Developed by Aditya , Github: AKteen
+
 router = APIRouter()
 
 class GenerateRequest(BaseModel):

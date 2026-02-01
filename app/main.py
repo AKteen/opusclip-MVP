@@ -27,7 +27,7 @@ app.mount(
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "message": "Opus MVP API is running"}
+    return {"status": "ok", "message": "Celer Clips MVP API is running"}
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):

@@ -2,6 +2,7 @@ import os
 import subprocess
 from app.core.storage import upload_file
 from app.core.config import FFMPEG_PATH
+from app.core.ffmpeg_lock import ffmpeg_lock
 
 CLIPS_DIR = os.path.join("storage", "clips")
 
@@ -23,24 +24,46 @@ def cut_clips(video_path, highlights, job_id):
         cmd = [
             FFMPEG_PATH,
             "-y",
+            "-threads", "2",  # Limit CPU threads
             "-ss", str(start),
             "-to", str(end),
             "-i", video_path,
             "-c:v", "libx264",
-            "-preset", "fast",
+            "-preset", "ultrafast",  # Fastest encoding
+            "-crf", "28",  # Lower quality for speed
+            "-vf", "scale=1280:-2",  # Reduce resolution
             "-c:a", "aac",
+            "-b:a", "128k",  # Lower audio bitrate
             local_clip_path
         ]
 
-        subprocess.run(cmd, check=True)
+        with ffmpeg_lock:  # Only one FFmpeg process at a time
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError(f"Clip {i} processing timeout after 10 minutes")
+            except subprocess.CalledProcessError as e:
+                # Handle SIGKILL and other FFmpeg failures
+                if e.returncode == -9:
+                    raise RuntimeError(f"FFmpeg killed by system (out of memory/CPU). Try smaller video or shorter clips.")
+                
+                error_msg = f"Clip {i} failed (exit code {e.returncode})"
+                if e.stderr:
+                    error_msg += f": {e.stderr[:200]}"
+                
+                raise RuntimeError(error_msg)
+            except Exception as e:
+                raise RuntimeError(f"Clip {i} processing failed: {str(e)}")
 
         # ☁️ Upload to S3
-        s3_url = upload_file(
-            local_path=local_clip_path,
-            s3_key=f"clips/{clip_name}"
-        )
-
-        clip_urls.append(s3_url)
+        try:
+            s3_url = upload_file(
+                local_path=local_clip_path,
+                s3_key=f"clips/{clip_name}"
+            )
+            clip_urls.append(s3_url)
+        except Exception as e:
+            raise RuntimeError(f"Failed to upload clip {i} to S3: {str(e)}")
 
         # 🧹 Cleanup local clip
         try:

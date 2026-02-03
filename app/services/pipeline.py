@@ -113,8 +113,31 @@ def run_pipeline(video_url, clip_duration, clip_count, job_id):
         
     except Exception as e:
         logger.error(f"[{job_id}] Pipeline failed: {str(e)}", exc_info=True)
+        
+        # Clean up any temp files on failure
+        try:
+            if 'paths' in locals() and os.path.exists(paths.get("video", "")):
+                os.remove(paths["video"])
+        except:
+            pass
+        
+        try:
+            if 'audio_wav' in locals() and os.path.exists(audio_wav):
+                os.remove(audio_wav)
+        except:
+            pass
+        
+        # Mark job as failed with clear error message
+        error_message = str(e)
+        if "killed by system" in error_message.lower():
+            error_message = "Video processing failed due to resource limits. Try a smaller video or shorter clips."
+        elif "timeout" in error_message.lower():
+            error_message = "Video processing timed out. Try a shorter video or reduce clip count."
+        
         jobs[job_id] = {
             "status": "failed",
-            "error": str(e)
+            "error": error_message
         }
-        raise
+        
+        # Don't re-raise to prevent API crash
+        logger.info(f"[{job_id}] Job marked as failed, API remains stable")

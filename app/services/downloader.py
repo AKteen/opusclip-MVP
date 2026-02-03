@@ -58,6 +58,14 @@ def download_video(file_url: str, job_id: str) -> dict:
         # Safety check
         if not os.path.exists(video_path) or os.path.getsize(video_path) < 100000:
             raise RuntimeError("Downloaded file is invalid or too small")
+        
+        # Additional check for HTML content (Dropbox dl=0 issue)
+        file_size = os.path.getsize(video_path)
+        if file_size < 1000000:  # Less than 1MB
+            with open(video_path, 'rb') as f:
+                first_bytes = f.read(100)
+                if b'<html' in first_bytes.lower() or b'<!doctype' in first_bytes.lower():
+                    raise RuntimeError("Downloaded HTML page instead of video. Check Dropbox link (use dl=1, not dl=0)")
 
         print(f"[{job_id}] Video downloaded successfully")
         return {"video": video_path}

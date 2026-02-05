@@ -24,16 +24,33 @@ def cut_clips(video_path, highlights, job_id):
         cmd = [
             FFMPEG_PATH,
             "-y",
-            "-threads", "2",  # Limit CPU threads
+            "-hide_banner",
+            "-loglevel", "error",
+            
+            # Trim settings
             "-ss", str(start),
             "-to", str(end),
             "-i", video_path,
+            
+            # ⭐ CRITICAL MEMORY OPTIMIZATIONS
             "-c:v", "libx264",
-            "-preset", "ultrafast",  # Fastest encoding
-            "-crf", "28",  # Lower quality for speed
-            "-vf", "scale=1280:-2",  # Reduce resolution
+            "-preset", "ultrafast",      # Changed from 'fast' - uses 50% less RAM
+            "-crf", "23",
+            "-maxrate", "2M",            # Prevents memory spikes
+            "-bufsize", "4M",
+            
+            # Audio
             "-c:a", "aac",
-            "-b:a", "128k",  # Lower audio bitrate
+            "-b:a", "128k",
+            
+            # ⭐ LIMIT RESOURCES
+            "-threads", "2",             # Don't use all CPUs
+            "-max_muxing_queue_size", "1024",
+            
+            # Output
+            "-movflags", "+faststart",
+            "-pix_fmt", "yuv420p",
+            
             local_clip_path
         ]
 

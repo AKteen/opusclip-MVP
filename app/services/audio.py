@@ -13,11 +13,14 @@ def extract_audio(audio_input: str, job_id: str) -> str:
     cmd = [
         FFMPEG_PATH,
         "-y",
+        "-hide_banner",
+        "-loglevel", "error",
         "-threads", "2",  # Limit CPU threads
         "-i", audio_input,
         "-ac", "1",
         "-ar", "16000",
         "-preset", "ultrafast",  # Fastest processing
+        "-max_muxing_queue_size", "1024",  # Limit memory usage
         wav_path
     ]
 

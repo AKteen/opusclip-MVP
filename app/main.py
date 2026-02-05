@@ -4,8 +4,18 @@ from app.api.routes import router
 from fastapi.staticfiles import StaticFiles
 from app.store import jobs
 from fastapi import HTTPException
+from app.core.temp_manager import temp_manager
+from app.core.request_limiter import request_limiter
 
 app = FastAPI(title="Celer Clips MVP")
+
+# Add request limiter middleware
+app.middleware("http")(request_limiter)
+
+# Cleanup old files on startup
+temp_manager.cleanup_old_files("storage/uploads", max_age_hours=24)
+temp_manager.cleanup_old_files("storage/audio", max_age_hours=24)
+temp_manager.cleanup_old_files("storage/clips", max_age_hours=24)
 
 # Add CORS middleware
 app.add_middleware(

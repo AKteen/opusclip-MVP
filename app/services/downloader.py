@@ -2,6 +2,7 @@ import os
 import requests
 import gdown
 import time
+from app.core.temp_manager import temp_manager
 
 UPLOAD_DIR = os.path.join("storage", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -21,6 +22,7 @@ def download_video(file_url: str, job_id: str) -> dict:
     print(f"[{job_id}] Downloading video from URL...")
     start_time = time.time()
     video_path = os.path.join(UPLOAD_DIR, f"{job_id}.mp4")
+    temp_manager.add_temp_file(video_path)
 
     try:
         # ✅ Google Drive
@@ -71,9 +73,5 @@ def download_video(file_url: str, job_id: str) -> dict:
         return {"video": video_path}
         
     except Exception as e:
-        if os.path.exists(video_path):
-            try:
-                os.remove(video_path)
-            except:
-                pass
+        temp_manager.cleanup_file(video_path)
         raise RuntimeError(f"Download failed: {str(e)}")

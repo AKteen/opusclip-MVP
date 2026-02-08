@@ -1,8 +1,16 @@
 import os
 import subprocess
+import time
+
 from app.core.storage import upload_file
 from app.core.config import FFMPEG_PATH
-from app.core.ffmpeg_lock import ffmpeg_semaphore, active_processes, cleanup_hung_processes
+from app.core.ffmpeg_lock import (
+    ffmpeg_semaphore,
+    cleanup_hung_processes,
+    kill_process_tree,
+    register_process,
+    unregister_process,
+)
 from app.core.memory_limiter import run_ffmpeg_with_limits
 from app.core.temp_manager import temp_manager
 
@@ -14,63 +22,108 @@ def cut_clips(video_path, highlights, job_id):
     clip_urls = []
 
     for i, (start, end) in enumerate(highlights, 1):
+        # ---- SAFE DURATION (NO -to ANYMORE) ----
+        duration = max(0.1, float(end) - float(start))
+
         clip_name = f"{job_id}_clip_{i}.mp4"
         local_clip_path = os.path.join(CLIPS_DIR, clip_name)
         temp_manager.add_temp_file(local_clip_path)
 
+        # ---- STABLE FFmpeg COMMAND ----
         cmd = [
-            FFMPEG_PATH, "-y", "-hide_banner", "-loglevel", "error",
-            "-ss", str(start), "-to", str(end), "-i", video_path,
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-            "-maxrate", "2M", "-bufsize", "4M",
-            "-c:a", "aac", "-b:a", "128k",
-            "-threads", "1", "-max_muxing_queue_size", "1024",
-            "-movflags", "+faststart", "-pix_fmt", "yuv420p",
-            local_clip_path
+            FFMPEG_PATH,
+            "-y",
+            "-hide_banner",
+            "-loglevel", "warning",
+
+            "-i", video_path,
+            "-ss", str(start),
+            "-t", str(duration),
+
+            # Safe stream mapping
+            "-map", "0:v:0",
+            "-map", "0:a?",
+
+            # Video
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "28",
+
+            # Audio (only if exists)
+            "-c:a", "aac",
+            "-b:a", "96k",
+
+            # Output safety
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            "-threads", "1",
+
+            local_clip_path,
         ]
 
+        # Cleanup old stuck FFmpeg jobs (does not need semaphore)
+        cleanup_hung_processes()
+
         with ffmpeg_semaphore:
-            cleanup_hung_processes()
             process = None
+            clip_key = f"{job_id}_clip_{i}"
+
             try:
-                import time
                 process = run_ffmpeg_with_limits(cmd, timeout=600)
-                active_processes[f"{job_id}_clip_{i}"] = (process, time.time())
-                
+                register_process(clip_key, process)
+
                 stdout, stderr = process.communicate(timeout=600)
-                
+
                 if process.returncode != 0:
-                    raise subprocess.CalledProcessError(process.returncode, cmd, stderr)
-                    
+                    raise subprocess.CalledProcessError(
+                        process.returncode,
+                        cmd,
+                        stderr=stderr
+                    )
+
             except subprocess.TimeoutExpired:
                 if process:
-                    from app.core.ffmpeg_lock import kill_process_tree
                     kill_process_tree(process.pid)
                 raise RuntimeError(f"Clip {i} processing timeout after 10 minutes")
+
             except subprocess.CalledProcessError as e:
                 if e.returncode == -9:
-                    raise RuntimeError(f"FFmpeg killed by system (out of memory/CPU). Try smaller video or shorter clips.")
-                
-                error_msg = f"Clip {i} failed (exit code {e.returncode})"
+                    raise RuntimeError(
+                        "FFmpeg killed by system (out of memory / CPU limits). "
+                        "Try shorter clips or smaller videos."
+                    )
+
+                stderr_text = ""
                 if e.stderr:
-                    error_msg += f": {e.stderr[:200]}"
-                
-                raise RuntimeError(error_msg)
+                    stderr_text = (
+                        e.stderr.decode(errors="ignore")
+                        if isinstance(e.stderr, bytes)
+                        else str(e.stderr)
+                    )
+
+                raise RuntimeError(
+                    f"Clip {i} failed "
+                    f"(start={start}, duration={duration}, exit={e.returncode}).\n"
+                    f"FFmpeg error:\n{stderr_text}"
+                )
+
             except Exception as e:
                 raise RuntimeError(f"Clip {i} processing failed: {str(e)}")
-            finally:
-                clip_key = f"{job_id}_clip_{i}"
-                if clip_key in active_processes:
-                    del active_processes[clip_key]
 
-        # Upload to S3
+            finally:
+                unregister_process(clip_key)
+
+        # ---- Upload to S3 ----
         try:
-            s3_url = upload_file(local_path=local_clip_path, s3_key=f"clips/{clip_name}")
+            s3_url = upload_file(
+                local_path=local_clip_path,
+                s3_key=f"clips/{clip_name}"
+            )
             clip_urls.append(s3_url)
         except Exception as e:
             raise RuntimeError(f"Failed to upload clip {i} to S3: {str(e)}")
 
-        # Cleanup local clip
+        # ---- Cleanup ----
         temp_manager.cleanup_file(local_clip_path)
 
     return clip_urls

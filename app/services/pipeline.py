@@ -8,7 +8,6 @@ from app.services.downloader import download_video
 from app.services.audio import extract_audio
 from app.services.highlights import detect_highlights
 from app.services.clipper import cut_clips
-from app.core.storage import upload_file
 from app.core.media_utils import get_video_duration
 from app.store import jobs
 
@@ -30,11 +29,11 @@ def run_pipeline(video_url, clip_duration, clip_count, job_id):
         # ---------------------------
         jobs[job_id] = {"status": "downloading", "progress": 10}
 
-        logger.info(f"[{job_id}] Step 1/6: Starting video download...")
+        logger.info(f"[{job_id}] Step 1/5: Starting video download...")
         step_start = time.time()
         paths = download_video(video_url, job_id)
         logger.info(
-            f"[{job_id}] Step 1/6: Media downloaded in "
+            f"[{job_id}] Step 1/5: Media downloaded in "
             f"{time.time() - step_start:.2f}s - Paths: {paths}"
         )
 
@@ -52,11 +51,11 @@ def run_pipeline(video_url, clip_duration, clip_count, job_id):
         # ---------------------------
         jobs[job_id] = {"status": "extracting_audio", "progress": 25}
 
-        logger.info(f"[{job_id}] Step 2/6: Starting audio extraction...")
+        logger.info(f"[{job_id}] Step 2/5: Starting audio extraction...")
         step_start = time.time()
         audio_wav = extract_audio(paths["video"], job_id)
         logger.info(
-            f"[{job_id}] Step 2/6: Audio extracted in "
+            f"[{job_id}] Step 2/5: Audio extracted in "
             f"{time.time() - step_start:.2f}s - Audio file: {audio_wav}"
         )
 
@@ -65,15 +64,15 @@ def run_pipeline(video_url, clip_duration, clip_count, job_id):
         # ---------------------------
         jobs[job_id] = {"status": "detecting_highlights", "progress": 40}
 
-        logger.info(f"[{job_id}] Step 3/6: Starting AI highlight detection...")
+        logger.info(f"[{job_id}] Step 3/5: Starting AI highlight detection...")
         step_start = time.time()
         highlights = detect_highlights(audio_wav, clip_duration, clip_count)
         logger.info(
-            f"[{job_id}] Step 3/6: Highlight detection completed in "
+            f"[{job_id}] Step 3/5: Highlight detection completed in "
             f"{time.time() - step_start:.2f}s - Found {len(highlights)} highlights"
         )
 
-        # Audio cleanup ASAP
+        # Cleanup audio ASAP
         try:
             os.remove(audio_wav)
             logger.info(f"[{job_id}] Deleted audio file")
@@ -90,11 +89,11 @@ def run_pipeline(video_url, clip_duration, clip_count, job_id):
             )
 
         # ---------------------------
-        # 4️⃣ Cut clips
+        # 4️⃣ Cut clips (FFmpeg)
         # ---------------------------
         jobs[job_id] = {"status": "cutting_clips", "progress": 60}
 
-        logger.info(f"[{job_id}] Step 4/6: Starting video clipping (ffmpeg)...")
+        logger.info(f"[{job_id}] Step 4/5: Starting video clipping (ffmpeg)...")
         step_start = time.time()
         clip_urls = cut_clips(
             video_path=paths["video"],
@@ -102,39 +101,25 @@ def run_pipeline(video_url, clip_duration, clip_count, job_id):
             job_id=job_id
         )
         logger.info(
-            f"[{job_id}] Step 4/6: Video clipping completed in "
+            f"[{job_id}] Step 4/5: Video clipping completed in "
             f"{time.time() - step_start:.2f}s - Generated {len(clip_urls)} clips"
         )
 
         # ---------------------------
-        # 5️⃣ Upload original video
+        # 🧹 Cleanup original video (NO UPLOAD)
         # ---------------------------
-        jobs[job_id] = {"status": "uploading", "progress": 80}
-
-        logger.info(f"[{job_id}] Step 5/6: Starting S3 upload...")
-        step_start = time.time()
-        video_s3_url = upload_file(
-            local_path=paths["video"],
-            s3_key=f"videos/{job_id}.mp4"
-        )
-        logger.info(
-            f"[{job_id}] Step 5/6: Original video uploaded in "
-            f"{time.time() - step_start:.2f}s - S3 URL: {video_s3_url}"
-        )
-
         try:
             os.remove(paths["video"])
-            logger.info(f"[{job_id}] Deleted original video file")
+            logger.info(f"[{job_id}] Deleted original video file (no S3 upload)")
         except Exception as e:
             logger.warning(f"[{job_id}] Failed to delete video file: {e}")
 
         # ---------------------------
-        # 6️⃣ Finalize job
+        # 5️⃣ Finalize job
         # ---------------------------
         jobs[job_id] = {
             "status": "completed",
             "progress": 100,
-            "video": video_s3_url,
             "clips": clip_urls
         }
 
